@@ -21,22 +21,57 @@ interface DashboardProps {
     checklists: ChecklistData[];
     onSelect: (id: string) => void;
     onCreate: (templateId: string, title?: string) => void;
+    user: any;
 }
 
-export function Dashboard({ checklists, onSelect, onCreate }: DashboardProps) {
+export function Dashboard({ checklists, onSelect, onCreate, user }: DashboardProps) {
     const [activeTab, setActiveTab] = useState<'REVISAO' | 'ANDAMENTO' | 'CONCLUIDO'>('ANDAMENTO');
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Stats calculation
-    const stats = {
-        andamento: checklists.filter(c => !c.items.every(i => i.isCompleted)).length,
-        concluidos: checklists.filter(c => c.items.length > 0 && c.items.every(i => i.isCompleted)).length,
-        aguardandoGestor: checklists.filter(c => c.type.includes('Admissão') && c.data?.currentSection === 2).length,
-        aguardandoTI: checklists.filter(c => c.type.includes('Admissão') && c.data?.currentSection === 3).length,
-        paraRevisao: checklists.filter(c => !c.data || c.data?.currentSection === 1).length
+    const canAccessChecklist = (checklist: ChecklistData) => {
+        // Adm view all
+        if (!user || user.role === 'Adm') return true;
+
+        const data = checklist.data || {};
+
+        // RH: Sees all? Or maybe just starting ones? Usually RH sees everything for Admission.
+        if (user.role === 'RH') return true;
+
+        // TI: Sees all? Or only when it's their turn? Usually sees all active.
+        if (user.role === 'TI') return true;
+
+        if (user.role === 'Gestor') {
+            // Must match department
+            // If user has region, must match region too
+            const deptMatch = data.setor_departamento === user.department;
+
+            // If user has NO region, they see all for that department (e.g. Head of Comercial)
+            // If user HAS region, they only see that region.
+            // If Checklist has NO region (e.g. Financeiro), region check is skipped.
+            let regionMatch = true;
+            if (user.region && data.regiao_comercial) {
+                regionMatch = data.regiao_comercial === user.region;
+            }
+
+            return deptMatch && regionMatch;
+        }
+
+        // Default: no access
+        return false;
     };
 
-    const filteredChecklists = checklists.filter(c => {
+    const accessibleChecklists = checklists.filter(canAccessChecklist);
+
+    // Stats calculation based on ACCESSIBLE checklists
+    const stats = {
+        andamento: accessibleChecklists.filter(c => !c.items.every(i => i.isCompleted)).length,
+        concluidos: accessibleChecklists.filter(c => c.items.length > 0 && c.items.every(i => i.isCompleted)).length,
+        aguardandoGestor: accessibleChecklists.filter(c => c.type.includes('Admissão') && c.data?.currentSection === 2).length,
+        aguardandoTI: accessibleChecklists.filter(c => c.type.includes('Admissão') && c.data?.currentSection === 3).length,
+        paraRevisao: accessibleChecklists.filter(c => !c.data || c.data?.currentSection === 1).length
+    };
+
+    const filteredChecklists = accessibleChecklists.filter(c => {
         const matchesSearch = c.title.toLowerCase().includes(searchTerm.toLowerCase());
         const isFinished = c.items.length > 0 && c.items.every(i => i.isCompleted);
 

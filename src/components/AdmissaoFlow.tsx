@@ -146,19 +146,42 @@ interface AdmissaoFlowProps {
     data: any;
     onUpdate: (data: any) => void;
     isReadOnly?: boolean;
+    user?: any;
 }
 
 export function AdmissaoFlow({
     data,
     onUpdate,
     isReadOnly = false,
+    user
 }: AdmissaoFlowProps) {
     const [currentSection, setCurrentSection] = useState(data?.currentSection || 1);
     const [isSendingEmail, setIsSendingEmail] = useState(false);
 
+    // Determine permissions based on User Role
+    const userRole = user?.role;
+    const isAdm = userRole === 'Adm';
+
+    // Current section role requirement
+    const sectionRoles: Record<number, string[]> = {
+        1: ['RH'],
+        2: ['Gestor'],
+        3: ['TI'],
+        4: ['Colaborador'] // or generic/TI/RH if helper needed
+    };
+
+    const allowedRoles = sectionRoles[currentSection] || [];
+    // Can edit if: passed isReadOnly is false AND (Admin OR User has required role)
+    // For Gestor, we might want to enforce Department match, but simplified for now to Role check.
+    const canEdit = !isReadOnly && (isAdm || allowedRoles.includes(userRole));
+
+    // Disable inputs if cannot edit
+    const isSectionReadOnly = !canEdit;
+
     const handleSectionChange = (sectionId: number) => {
+        // Allow navigation to view, but editing is controlled by isSectionReadOnly logic above
         setCurrentSection(sectionId);
-        onUpdate({ ...form.getValues(), currentSection: sectionId });
+        // Don't auto-update on nav
     };
 
     const form = useForm<FormData>({
@@ -213,29 +236,58 @@ export function AdmissaoFlow({
     // Monitoramento em tempo real para atualização instantânea do checklist
     useEffect(() => {
         const subscription = form.watch((value) => {
-            onUpdate({ ...value, currentSection });
+            // Only emit updates if user has permission to edit this section
+            if (canEdit) {
+                onUpdate({ ...value, currentSection });
+            }
         });
         return () => subscription.unsubscribe();
-    }, [form, currentSection, onUpdate]);
+    }, [form, currentSection, onUpdate, canEdit]);
 
     const handleSubmit = async (values: FormData) => {
-        if (currentSection === 1) {
-            setIsSendingEmail(true);
-            // Simulação de envio de e-mail ao gestor via Supabase Edge Functions / Resend
-            console.log(`Enviando e-mail de notificação para: ${values.email_gestor || 'gestor@medbeauty.com'}`);
-
-            // Simula delay de rede
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            setIsSendingEmail(false);
-
-            const nextSection = currentSection + 1;
-            setCurrentSection(nextSection);
-            onUpdate({ ...values, currentSection: nextSection });
-            alert(`Sucesso!\n\n1. Dados salvos no sistema.\n2. E-mail de notificação enviado para ${values.email_gestor || 'o gestor'}.\n\nO processo agora está na aba do Gestor.`);
-        } else {
-            onUpdate({ ...values, currentSection });
-            alert("Dados salvos com sucesso!");
+        if (!canEdit) {
+            alert("Você não tem permissão para salvar nesta etapa.");
+            return;
         }
+
+        setIsSendingEmail(true);
+
+        // Simulação de delay/envio
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Define mensagens baseado na seção atual
+        let successMessage = "";
+        let nextSection = currentSection;
+
+        switch (currentSection) {
+            case 1: // RH -> Gestor
+                console.log(`Enviando para Gestor: ${values.email_gestor}`);
+                nextSection = 2;
+                successMessage = `Sucesso!\n\nProcesso enviado para o Gestor.`;
+                break;
+            case 2: // Gestor -> TI
+                console.log("Enviando para TI");
+                nextSection = 3;
+                successMessage = `Sucesso!\n\nDefinições do Gestor salvas. Processo enviado para TI.`;
+                break;
+            case 3: // TI -> Colaborador
+                console.log("Enviando para Colaborador");
+                nextSection = 4;
+                successMessage = `Sucesso!\n\nConfiguração de TI concluída. Enviado para validação do Colaborador.`;
+                break;
+            case 4: // Colaborador -> Fim
+                console.log("Finalizando Admissão");
+                // nextSection mantém 4 ou poderia ir para uma tela de "Concluído"
+                successMessage = `Parabéns!\n\nProcesso de admissão finalizado com sucesso.`;
+                break;
+            default:
+                successMessage = "Dados salvos.";
+        }
+
+        setIsSendingEmail(false);
+        setCurrentSection(nextSection);
+        onUpdate({ ...values, currentSection: nextSection });
+        alert(successMessage);
     };
 
     const onFormError = (errors: any) => {
@@ -247,8 +299,32 @@ export function AdmissaoFlow({
         alert("Ops! Alguns campos precisam de atenção:\n" + errorFields);
     };
 
+    const getButtonText = () => {
+        if (isSendingEmail) return "Processando...";
+        switch (currentSection) {
+            case 1: return "Enviar ao Gestor";
+            case 2: return "Enviar para TI";
+            case 3: return "Enviar para Colaborador";
+            case 4: return "Finalizar Admissão";
+            default: return "Salvar";
+        }
+    };
+
+    // If section explicitly doesn't match role, show readonly banner? 
+    // Or just rely on disabled inputs.
+
+    // Specific logic for Department Validation can be added here if needed
+    // e.g. if (userRole === 'Gestor' && user.department !== data.setor_departamento) canEdit = false;
+
     return (
         <div className="space-y-6">
+            {!canEdit && (
+                <div className="bg-amber-100 border-l-4 border-amber-500 text-amber-700 p-4 rounded shadow-sm" role="alert">
+                    <p className="font-bold">Modo de Visualização</p>
+                    <p>Você não tem permissão para editar esta etapa ({sections.find(s => s.id === currentSection)?.role}).</p>
+                </div>
+            )}
+
             <Card className="border-rose-gold/20 bg-gradient-to-r from-rose-gold/5 to-transparent shadow-soft">
                 <CardHeader>
                     <div className="flex items-center justify-between">
@@ -276,10 +352,11 @@ export function AdmissaoFlow({
                             {sections.map((section) => (
                                 <div
                                     key={section.id}
-                                    className={`flex items-center gap-2 px-3 py-2 rounded-md transition-all ${section.id === currentSection
+                                    className={`flex items-center gap-2 px-3 py-2 rounded-md transition-all cursor-pointer ${section.id === currentSection
                                         ? "bg-rose-gold text-white shadow-md"
                                         : "text-muted-foreground hover:bg-rose-gold/10 hover:text-rose-gold-dark"
                                         }`}
+                                    // onClick={() => handleSectionChange(section.id)} // Desabilitado para forçar o fluxo sequencial se desejar, ou manter para debug
                                     onClick={() => handleSectionChange(section.id)}
                                 >
                                     <section.icon className="h-4 w-4" />
@@ -312,7 +389,7 @@ export function AdmissaoFlow({
                                                     1. Nome completo <span className="text-destructive">*</span>
                                                 </FormLabel>
                                                 <FormControl>
-                                                    <Input placeholder="Insira o nome completo" {...field} disabled={isReadOnly} />
+                                                    <Input placeholder="Insira o nome completo" {...field} disabled={isSectionReadOnly} />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -327,7 +404,7 @@ export function AdmissaoFlow({
                                                     2. Nome Exibição <span className="text-destructive">*</span>
                                                 </FormLabel>
                                                 <FormControl>
-                                                    <Input placeholder="Como o colaborador será chamado" {...field} disabled={isReadOnly} />
+                                                    <Input placeholder="Como o colaborador será chamado" {...field} disabled={isSectionReadOnly} />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -345,7 +422,7 @@ export function AdmissaoFlow({
                                                     3. Cargo <span className="text-destructive">*</span>
                                                 </FormLabel>
                                                 <FormControl>
-                                                    <Input placeholder="Ex: Analista de RH" {...field} disabled={isReadOnly} />
+                                                    <Input placeholder="Ex: Analista de RH" {...field} disabled={isSectionReadOnly} />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -358,10 +435,10 @@ export function AdmissaoFlow({
                                             <FormItem>
                                                 <FormLabel>4. Setor <span className="text-destructive">*</span></FormLabel>
                                                 <FormControl>
-                                                    <RadioGroup onValueChange={field.onChange} value={field.value} className="grid grid-cols-2 gap-2">
+                                                    <RadioGroup onValueChange={field.onChange} value={field.value} className="grid grid-cols-2 gap-2" disabled={isSectionReadOnly}>
                                                         {DEPARTAMENTOS.map(d => (
                                                             <div key={d.value} className="flex items-center space-x-2">
-                                                                <RadioGroupItem value={d.value} id={d.value} disabled={isReadOnly} />
+                                                                <RadioGroupItem value={d.value} id={d.value} disabled={isSectionReadOnly} />
                                                                 <Label htmlFor={d.value}>{d.label}</Label>
                                                             </div>
                                                         ))}
@@ -379,10 +456,10 @@ export function AdmissaoFlow({
                                                 <FormItem className="animate-in slide-in-from-left-2 fade-in duration-300">
                                                     <FormLabel>4.1 Região Comercial <span className="text-destructive">*</span></FormLabel>
                                                     <FormControl>
-                                                        <RadioGroup onValueChange={field.onChange} value={field.value} className="grid grid-cols-2 gap-2">
+                                                        <RadioGroup onValueChange={field.onChange} value={field.value} className="grid grid-cols-2 gap-2" disabled={isSectionReadOnly}>
                                                             {REGIOES_COMERCIAL.map(r => (
                                                                 <div key={r.value} className="flex items-center space-x-2">
-                                                                    <RadioGroupItem value={r.value} id={`regiao-${r.value}`} disabled={isReadOnly} />
+                                                                    <RadioGroupItem value={r.value} id={`regiao-${r.value}`} disabled={isSectionReadOnly} />
                                                                     <Label htmlFor={`regiao-${r.value}`}>{r.label}</Label>
                                                                 </div>
                                                             ))}
@@ -403,10 +480,10 @@ export function AdmissaoFlow({
                                             <FormItem className="col-span-1 md:col-span-1">
                                                 <FormLabel>5. Tipo Contratação <span className="text-destructive">*</span></FormLabel>
                                                 <FormControl>
-                                                    <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col gap-2">
+                                                    <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col gap-2" disabled={isSectionReadOnly}>
                                                         {["CLT", "PJ", "Estágio"].map(t => (
                                                             <div key={t} className="flex items-center space-x-2">
-                                                                <RadioGroupItem value={t} id={t} disabled={isReadOnly} />
+                                                                <RadioGroupItem value={t} id={t} disabled={isSectionReadOnly} />
                                                                 <Label htmlFor={t}>{t}</Label>
                                                             </div>
                                                         ))}
@@ -422,7 +499,7 @@ export function AdmissaoFlow({
                                         render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>6. Data Admissão <span className="text-destructive">*</span></FormLabel>
-                                                <FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl>
+                                                <FormControl><Input type="date" {...field} disabled={isSectionReadOnly} /></FormControl>
                                                 <FormMessage />
                                             </FormItem>
                                         )}
@@ -433,7 +510,7 @@ export function AdmissaoFlow({
                                         render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>7. Data de Início <span className="text-destructive">*</span></FormLabel>
-                                                <FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl>
+                                                <FormControl><Input type="date" {...field} disabled={isSectionReadOnly} /></FormControl>
                                                 <FormMessage />
                                             </FormItem>
                                         )}
@@ -471,6 +548,7 @@ export function AdmissaoFlow({
                                                                                 ? field.onChange([...currentValues, item.value])
                                                                                 : field.onChange(currentValues.filter((v: string) => v !== item.value))
                                                                         }}
+                                                                        disabled={isSectionReadOnly}
                                                                     />
                                                                 </FormControl>
                                                                 <FormLabel className="font-normal">{item.label}</FormLabel>
@@ -533,6 +611,96 @@ export function AdmissaoFlow({
                                         </FormItem>
                                     )}
                                 />
+                                {/* Adicionar mais campos de TI conforme necessário, baseado no schema */}
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* SECAO 4 - COLABORADOR */}
+                    {currentSection === 4 && (
+                        <Card>
+                            <CardHeader className="bg-blue-50/50 dark:bg-blue-900/20 rounded-t-lg border-b border-blue-100 dark:border-blue-900/30">
+                                <CardTitle>Validação do Colaborador</CardTitle>
+                            </CardHeader>
+                            <CardContent className="pt-6 space-y-6">
+                                <div className="space-y-4">
+                                    <FormField
+                                        control={form.control}
+                                        name="confirma_recebimento_equipamentos"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                                                <div className="space-y-0.5">
+                                                    <FormLabel className="text-base">Equipamentos Recebidos</FormLabel>
+                                                    <CardDescription>
+                                                        Confirmo que recebi todos os equipamentos listados.
+                                                    </CardDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Checkbox
+                                                        checked={field.value === "Sim"}
+                                                        onCheckedChange={(checked) => field.onChange(checked ? "Sim" : "Nao")}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name="confirma_funcionamento_acessos"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                                                <div className="space-y-0.5">
+                                                    <FormLabel className="text-base">Acessos Funcionando</FormLabel>
+                                                    <CardDescription>
+                                                        Confirmo que testei meus acessos (Email, AD, etc) e estão ok.
+                                                    </CardDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Checkbox
+                                                        checked={field.value === "Sim"}
+                                                        onCheckedChange={(checked) => field.onChange(checked ? "Sim" : "Nao")}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name="recebeu_orientacao_sistemas"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                                                <div className="space-y-0.5">
+                                                    <FormLabel className="text-base">Orientação de Sistemas</FormLabel>
+                                                    <CardDescription>
+                                                        Recebi orientações iniciais sobre os sistemas da empresa.
+                                                    </CardDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Checkbox
+                                                        checked={field.value === "Sim"}
+                                                        onCheckedChange={(checked) => field.onChange(checked ? "Sim" : "Nao")}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name="observacoes_colaborador"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Observações do Colaborador</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="Alguma observação ou pendência?" {...field} value={field.value || ""} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
                             </CardContent>
                         </Card>
                     )}
@@ -546,17 +714,12 @@ export function AdmissaoFlow({
                             {isSendingEmail ? (
                                 <>
                                     <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    Enviando...
-                                </>
-                            ) : currentSection === 1 ? (
-                                <>
-                                    <Send className="w-4 h-4" />
-                                    Enviar ao Gestor
+                                    Processando...
                                 </>
                             ) : (
                                 <>
-                                    <Save className="w-4 h-4" />
-                                    Salvar Alterações
+                                    {currentSection < 4 ? <Send className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                                    {getButtonText()}
                                 </>
                             )}
                         </Button>

@@ -31,6 +31,7 @@ interface ChecklistViewProps {
     onTaskAdd: (text: string) => void;
     onTaskToggle: (taskId: string, isCompleted: boolean) => void;
     onTaskDelete: (taskId: string) => void;
+    user: any;
 }
 
 export function ChecklistView({
@@ -39,7 +40,8 @@ export function ChecklistView({
     onBack,
     onTaskAdd,
     onTaskToggle,
-    onTaskDelete
+    onTaskDelete,
+    user
 }: ChecklistViewProps) {
     const [newItemText, setNewItemText] = useState('');
 
@@ -112,6 +114,7 @@ export function ChecklistView({
                             const updatedItems = syncItems(checklist.items, flowData, 'admissao');
                             onUpdate({ data: flowData, items: updatedItems });
                         }}
+                        user={user}
                     />
                 )}
 

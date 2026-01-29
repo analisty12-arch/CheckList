@@ -42,6 +42,7 @@ interface SocialFeedProps {
     user: { name: string; avatar?: string };
     onLogout: () => void;
     onOpenChecklists: () => void;
+    onNavigateToEmployees?: () => void;
     pendingManager?: number;
 }
 
@@ -78,7 +79,7 @@ const MOCK_POSTS: Post[] = [
     }
 ];
 
-export function SocialFeed({ user, onLogout, onOpenChecklists, pendingManager = 0 }: SocialFeedProps) {
+export function SocialFeed({ user, onLogout, onOpenChecklists, onNavigateToEmployees, pendingManager = 0 }: SocialFeedProps) {
     const [posts, setPosts] = useState<Post[]>(MOCK_POSTS);
     const [newPost, setNewPost] = useState("");
 
@@ -186,6 +187,7 @@ export function SocialFeed({ user, onLogout, onOpenChecklists, pendingManager = 
                                     key={item.label}
                                     variant="ghost"
                                     className={`w-full justify-start gap-3 h-11 px-4 hover:bg-rose-gold/5 ${item.active ? 'bg-rose-gold/10 text-rose-gold font-bold' : 'text-slate-600'}`}
+                                    onClick={() => item.label === 'Equipe' && onNavigateToEmployees?.()}
                                 >
                                     <item.icon className="h-5 w-5" />
                                     {item.label}

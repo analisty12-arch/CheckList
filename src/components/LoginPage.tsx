@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, Lock, User } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 interface LoginProps {
     onLogin: (user: any) => void;
@@ -13,14 +14,38 @@ export function LoginPage({ onLogin }: LoginProps) {
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        // Simple mock login
-        setTimeout(() => {
-            onLogin({ email, name: email.split('@')[0] });
+
+        try {
+            // 1. Verify credentials in our custom users table
+            const { data: user, error } = await supabase
+                .from('app_users')
+                .select('*')
+                .eq('email', email)
+                .eq('password', password) // Validating plain text for this local demo
+                .single();
+
+            if (error || !user) {
+                console.error('Login error:', error);
+                alert("Login falhou! Verifique suas credenciais.");
+                setLoading(false);
+                return;
+            }
+
+            // 2. Login successful - pass full user object with role/dept
+            // Simulate a token/session delay if needed, or just proceed
+            setTimeout(() => {
+                onLogin(user);
+                setLoading(false);
+            }, 500);
+
+        } catch (err) {
+            console.error('Unexpected error:', err);
+            alert("Erro ao tentar fazer login.");
             setLoading(false);
-        }, 800);
+        }
     };
 
     return (
