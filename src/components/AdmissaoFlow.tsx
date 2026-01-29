@@ -38,7 +38,7 @@ const DEPARTAMENTOS = [
     { value: "Logística", label: "Logística" },
     { value: "Jurídico", label: "Jurídico" },
     { value: "TI", label: "Tech Digital" },
-    { value: "RH", label: "Compras" },
+    { value: "RH", label: "Recursos Humanos" },
 ];
 
 const REGIOES_COMERCIAL = [
@@ -253,35 +253,23 @@ export function AdmissaoFlow({
         setIsSendingEmail(true);
 
         // Simulação de delay/envio
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 1500));
 
-        // Define mensagens baseado na seção atual
-        let successMessage = "";
         let nextSection = currentSection;
+        let successMessage = "";
 
-        switch (currentSection) {
-            case 1: // RH -> Gestor
-                console.log(`Enviando para Gestor: ${values.email_gestor}`);
-                nextSection = 2;
-                successMessage = `Sucesso!\n\nProcesso enviado para o Gestor.`;
-                break;
-            case 2: // Gestor -> TI
-                console.log("Enviando para TI");
-                nextSection = 3;
-                successMessage = `Sucesso!\n\nDefinições do Gestor salvas. Processo enviado para TI.`;
-                break;
-            case 3: // TI -> Colaborador
-                console.log("Enviando para Colaborador");
-                nextSection = 4;
-                successMessage = `Sucesso!\n\nConfiguração de TI concluída. Enviado para validação do Colaborador.`;
-                break;
-            case 4: // Colaborador -> Fim
-                console.log("Finalizando Admissão");
-                // nextSection mantém 4 ou poderia ir para uma tela de "Concluído"
-                successMessage = `Parabéns!\n\nProcesso de admissão finalizado com sucesso.`;
-                break;
-            default:
-                successMessage = "Dados salvos.";
+        if (currentSection < sections.length) {
+            nextSection = currentSection + 1;
+
+            if (currentSection === 1) {
+                successMessage = `Sucesso!\n\n1. Dados salvos no sistema.\n2. E-mail de notificação enviado para ${values.email_gestor || 'o gestor'}.\n\nO processo agora está na aba do Gestor.`;
+            } else if (currentSection === 2) {
+                successMessage = "Configurações do Gestor salvas! O processo foi enviado para o TI configurar os acessos.";
+            } else if (currentSection === 3) {
+                successMessage = "Configurações de TI concluídas! O checklist agora está pronto para a conferência final do Colaborador.";
+            }
+        } else {
+            successMessage = "Processo concluído e salvo com sucesso!";
         }
 
         setIsSendingEmail(false);
