@@ -3,7 +3,7 @@ import { Dashboard } from './components/Dashboard'
 import { ChecklistView, type ChecklistData } from './components/ChecklistView'
 import { LoginPage } from './components/LoginPage'
 import { SocialFeed } from './components/SocialFeed'
-import { UserManagement } from './components/UserManagement'
+import { AdminPanel } from './components/AdminPanel'
 import { EmployeeDirectory } from './components/EmployeeDirectory'
 import { templates } from './data/templates'
 import { supabase } from './lib/supabase'
@@ -211,6 +211,7 @@ function App() {
         onLogout={() => { setCurrentUser(null); setView('login'); }}
         onOpenChecklists={() => setView('dashboard')}
         onNavigateToEmployees={() => setView('employees')}
+        onOpenAdmin={() => setView('admin')}
         pendingManager={pendingManager}
       />
     );
@@ -291,7 +292,7 @@ function App() {
       </header>
 
       {view === 'admin' ? (
-        <UserManagement />
+        <AdminPanel />
       ) : view === 'employees' ? (
         <EmployeeDirectory />
       ) : (
