@@ -25,7 +25,19 @@ interface DashboardProps {
 }
 
 export function Dashboard({ checklists, onSelect, onCreate, user }: DashboardProps) {
-    const [activeTab, setActiveTab] = useState<'REVISAO' | 'ANDAMENTO' | 'CONCLUIDO'>('ANDAMENTO');
+    // Role-based logic
+    const roleConfig: Record<string, { title: string; pendingSection: number }> = {
+        'RH': { title: 'Portal RH', pendingSection: 1 },
+        'Gestor': { title: 'Portal do Gestor', pendingSection: 2 },
+        'TI': { title: 'Portal TI', pendingSection: 3 },
+        'Colaborador': { title: 'Portal do Colaborador', pendingSection: 4 },
+        'Adm': { title: 'Visão Geral (Adm)', pendingSection: 0 } // Adm sees all
+    };
+
+    const currentRole = user?.role || 'RH'; // Fallback
+    const config = roleConfig[currentRole] || roleConfig['RH'];
+    const pendingSectionId = config.pendingSection;
+
     const [searchTerm, setSearchTerm] = useState('');
 
     const canAccessChecklist = (checklist: ChecklistData) => {
@@ -62,21 +74,30 @@ export function Dashboard({ checklists, onSelect, onCreate, user }: DashboardPro
 
     const accessibleChecklists = checklists.filter(canAccessChecklist);
 
-    // Stats calculation based on ACCESSIBLE checklists
-    const stats = {
-        andamento: accessibleChecklists.filter(c => !c.items.every(i => i.isCompleted)).length,
-        concluidos: accessibleChecklists.filter(c => c.items.length > 0 && c.items.every(i => i.isCompleted)).length,
-        aguardandoGestor: accessibleChecklists.filter(c => c.type.includes('Admissão') && c.data?.currentSection === 2).length,
-        aguardandoTI: accessibleChecklists.filter(c => c.type.includes('Admissão') && c.data?.currentSection === 3).length,
-        paraRevisao: accessibleChecklists.filter(c => !c.data || c.data?.currentSection === 1).length
-    };
+    // Filter "My Pending Actions"
+    const myPendingChecklists = accessibleChecklists.filter(c => {
+        const currentSection = c.data?.currentSection || 1;
+        // Adm sees all active
+        if (currentRole === 'Adm') return !c.items.every(i => i.isCompleted);
+
+        // Others see only if section matches their role responsibility
+        return currentSection === pendingSectionId && !c.items.every(i => i.isCompleted);
+    });
+
+    const [activeTab, setActiveTab] = useState<'PENDENCIAS' | 'TODOS' | 'CONCLUIDO'>(myPendingChecklists.length > 0 ? 'PENDENCIAS' : 'TODOS');
 
     const filteredChecklists = accessibleChecklists.filter(c => {
         const matchesSearch = c.title.toLowerCase().includes(searchTerm.toLowerCase());
         const isFinished = c.items.length > 0 && c.items.every(i => i.isCompleted);
+        const currentSection = c.data?.currentSection || 1;
 
         if (activeTab === 'CONCLUIDO') return matchesSearch && isFinished;
-        if (activeTab === 'REVISAO') return matchesSearch && (!c.data || c.data?.currentSection === 1) && !isFinished;
+        if (activeTab === 'PENDENCIAS') {
+            // Specific logic for PENDENCIAS tab
+            if (currentRole === 'Adm') return matchesSearch && !isFinished;
+            return matchesSearch && currentSection === pendingSectionId && !isFinished;
+        }
+        // TODOS / ANDAMENTO
         return matchesSearch && !isFinished;
     });
 
@@ -86,115 +107,124 @@ export function Dashboard({ checklists, onSelect, onCreate, user }: DashboardPro
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                 <div>
                     <h1 className="text-3xl font-serif text-rose-gold-dark flex items-center gap-2">
-                        <Users className="w-8 h-8 text-rose-gold" />
-                        Admissão - RH
+                        {currentRole === 'TI' ? <Monitor className="w-8 h-8 text-rose-gold" /> :
+                            currentRole === 'Gestor' ? <Users className="w-8 h-8 text-rose-gold" /> :
+                                currentRole === 'Colaborador' ? <FileText className="w-8 h-8 text-rose-gold" /> :
+                                    <Users className="w-8 h-8 text-rose-gold" />}
+                        {config.title}
                     </h1>
                     <p className="text-muted-foreground mt-1">
-                        Inicie processos de admissão e acompanhe o fluxo por departamento
+                        {myPendingChecklists.length > 0
+                            ? `Você tem ${myPendingChecklists.length} processos aguardando sua ação.`
+                            : "Nenhuma pendência prioritária no momento."}
                     </p>
                 </div>
                 <div className="flex gap-2">
-                    <Button
-                        onClick={() => {
-                            const name = prompt("Nome do Colaborador:", "Novo Candidato");
-                            if (name) onCreate('admissao', name);
-                        }}
-                        className="bg-rose-gold hover:bg-rose-gold-dark text-white gap-2 h-11"
-                    >
-                        <Plus className="w-5 h-5" />
-                        Nova Admissão
-                    </Button>
+                    {/* Only RH or Adm should create admissions */}
+                    {(currentRole === 'RH' || currentRole === 'Adm') && (
+                        <Button
+                            onClick={() => {
+                                const name = prompt("Nome do Colaborador:", "Novo Candidato");
+                                if (name) onCreate('admissao', name);
+                            }}
+                            className="bg-rose-gold hover:bg-rose-gold-dark text-white"
+                        >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Nova Admissão
+                        </Button>
+                    )}
                 </div>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <StatCard
-                    icon={Users}
-                    label="Em Andamento"
-                    value={stats.andamento}
-                    color="text-rose-gold"
-                    bgColor="bg-rose-gold/10"
-                />
-                <StatCard
-                    icon={CheckCircle2}
-                    label="Concluídos"
-                    value={stats.concluidos}
-                    color="text-sage-dark"
-                    bgColor="bg-sage/20"
-                />
-                <StatCard
-                    icon={Clock}
-                    label="Aguardando Gestor"
-                    value={stats.aguardandoGestor}
-                    color="text-amber-600"
-                    bgColor="bg-amber-100 dark:bg-amber-900/20"
-                />
-                <StatCard
-                    icon={Monitor}
-                    label="Aguardando TI"
-                    value={stats.aguardandoTI}
-                    color="text-blue-600"
-                    bgColor="bg-blue-100 dark:bg-blue-900/20"
-                />
+            {/* Stats Cards - Simplified for relevant role */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                {/* Only show "Minhas Pendências" count prominently */}
+                <Card className="bg-rose-gold/10 border-none shadow-soft">
+                    <CardContent className="p-6">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-rose-gold/20 rounded-full text-rose-gold-dark">
+                                <Clock className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-muted-foreground">Minhas Pendências</p>
+                                <h3 className="text-2xl font-bold text-rose-gold-dark">{myPendingChecklists.length}</h3>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+                {/* Show total active for context */}
+                <Card className="shadow-soft">
+                    <CardContent className="p-6">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-slate-100 rounded-full text-slate-600">
+                                <Users className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-muted-foreground">Total em Andamento</p>
+                                <h3 className="text-2xl font-bold text-slate-800">
+                                    {accessibleChecklists.filter(c => !c.items.every(i => i.isCompleted)).length}
+                                </h3>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
 
-            {/* List Control */}
-            <Card className="mb-0 border-none bg-transparent shadow-none">
-                <CardContent className="p-0">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                        <div className="flex p-1 bg-muted/30 rounded-lg w-fit border border-border/50">
-                            <TabButton
-                                active={activeTab === 'REVISAO'}
-                                onClick={() => setActiveTab('REVISAO')}
-                                label="Para Revisão"
-                                count={stats.paraRevisao}
-                                icon={FileText}
-                            />
-                            <TabButton
-                                active={activeTab === 'ANDAMENTO'}
-                                onClick={() => setActiveTab('ANDAMENTO')}
-                                label="Em Andamento"
-                                icon={Users}
-                            />
-                            <TabButton
-                                active={activeTab === 'CONCLUIDO'}
-                                onClick={() => setActiveTab('CONCLUIDO')}
-                                label="Concluídos"
-                                icon={CheckCircle2}
-                            />
-                        </div>
-                        <div className="relative w-full md:w-64">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Buscar colaborador..."
-                                className="pl-9 bg-white dark:bg-card border-rose-gold/20"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Checklists List */}
-                    <div className="space-y-3">
-                        {filteredChecklists.length === 0 ? (
-                            <div className="text-center py-20 bg-rose-gold/5 rounded-2xl border-2 border-dashed border-rose-gold/20">
-                                <FileText className="w-12 h-12 text-rose-gold/30 mx-auto mb-4" />
-                                <p className="text-muted-foreground font-medium">Nenhum processo encontrado nesta categoria.</p>
-                            </div>
-                        ) : (
-                            filteredChecklists.map((list) => (
-                                <ListItem
-                                    key={list.id}
-                                    list={list}
-                                    onSelect={() => onSelect(list.id)}
-                                // onDelete={onDelete}
-                                />
-                            ))
+            <div className="flex items-center gap-4 mb-6">
+                <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Buscar por nome..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-9 bg-white"
+                    />
+                </div>
+                <div className="flex gap-2">
+                    <Button
+                        variant={activeTab === 'PENDENCIAS' ? 'default' : 'outline'}
+                        onClick={() => setActiveTab('PENDENCIAS')}
+                        className={activeTab === 'PENDENCIAS' ? 'bg-rose-gold hover:bg-rose-gold-dark' : ''}
+                    >
+                        Minhas Pendências
+                        {myPendingChecklists.length > 0 && (
+                            <Badge variant="secondary" className="ml-2 bg-white/20 text-current">{myPendingChecklists.length}</Badge>
                         )}
+                    </Button>
+                    <Button
+                        variant={activeTab === 'TODOS' ? 'default' : 'outline'}
+                        onClick={() => setActiveTab('TODOS')}
+                        className={activeTab === 'TODOS' ? 'bg-rose-gold hover:bg-rose-gold-dark' : ''}
+                    >
+                        Todos
+                    </Button>
+                    <Button
+                        variant={activeTab === 'CONCLUIDO' ? 'default' : 'outline'}
+                        onClick={() => setActiveTab('CONCLUIDO')}
+                        className={activeTab === 'CONCLUIDO' ? 'bg-rose-gold hover:bg-rose-gold-dark' : ''}
+                    >
+                        Concluídos
+                    </Button>
+                </div>
+            </div>
+            {/* Checklists List */}
+            <div className="space-y-3">
+                {filteredChecklists.length === 0 ? (
+                    <div className="text-center py-20 bg-rose-gold/5 rounded-2xl border-2 border-dashed border-rose-gold/20">
+                        <FileText className="w-12 h-12 text-rose-gold/30 mx-auto mb-4" />
+                        <p className="text-muted-foreground font-medium">Nenhum processo encontrado nesta categoria.</p>
                     </div>
-                </CardContent>
-            </Card>
+                ) : (
+                    filteredChecklists.map((list) => (
+                        <ListItem
+                            key={list.id}
+                            list={list}
+                            onSelect={() => onSelect(list.id)}
+                        // onDelete={onDelete}
+                        />
+                    ))
+                )}
+            </div>
         </div>
     )
 }

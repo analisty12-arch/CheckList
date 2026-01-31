@@ -61,11 +61,11 @@ interface SelectValueProps extends React.HTMLAttributes<HTMLSpanElement> {
     placeholder?: string;
 }
 
-const SelectValue = React.forwardRef<HTMLSpanElement, SelectValueProps>(({ className, placeholder, ...props }, ref) => {
+const SelectValue = React.forwardRef<HTMLSpanElement, SelectValueProps & { children?: React.ReactNode }>(({ className, placeholder, children, ...props }, ref) => {
     const ctx = React.useContext(SelectContext);
     return (
         <span ref={ref} className={className} {...props}>
-            {ctx?.value || placeholder}
+            {children || ctx?.value || placeholder}
         </span>
     )
 })
