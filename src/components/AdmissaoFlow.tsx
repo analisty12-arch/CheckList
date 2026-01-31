@@ -27,7 +27,8 @@ import {
     Monitor,
     CheckCircle2,
     Save,
-    Send
+    Send,
+    ClipboardList
 } from "lucide-react";
 
 // Departments
@@ -76,6 +77,7 @@ const secaoGestorSchema = z.object({
     sharepoint_pasta: z.string().optional().nullable(),
     outros_acessos: z.string().optional().nullable(),
     necessita_impressora: z.enum(["Sim", "Nao", ""]).optional().nullable(),
+    necessita_vpn: z.enum(["Sim", "Nao", ""]).optional().nullable(),
     observacoes_gestor: z.string().optional().nullable(),
 });
 
@@ -87,22 +89,25 @@ const EQUIPAMENTOS_OPTIONS = [
     { value: "Monitor", label: "Monitor" },
     { value: "HeadSet", label: "HeadSet" },
     { value: "Mouse", label: "Mouse" },
+    { value: "Teclado", label: "Teclado" },
+    { value: "Webcam", label: "Webcam" },
 ];
 
-// const USER_OPTIONS = [ ... ]; // Placeholder if needed
-// const SOFTWARES_OPTIONS = [
-//     { value: "Microsoft 365", label: "Microsoft 365" },
-//     { value: "SAP B1", label: "SAP B1" },
-//     { value: "Salesforce", label: "Salesforce" },
-// ];
+const SOFTWARES_OPTIONS = [
+    { value: "Microsoft 365", label: "Microsoft 365 (Office, Teams, Email)" },
+    { value: "SAP B1", label: "SAP B1" },
+    { value: "Salesforce", label: "Salesforce" },
+    { value: "Adobe CC", label: "Adobe Creative Cloud" },
+    { value: "Power BI", label: "Power BI" },
+    { value: "Visual Studio", label: "Visual Studio" },
+];
 
-// const ACESSOS_OPTIONS = [
-//     { value: "AD", label: "AD" },
-//     { value: "Teams", label: "Teams" },
-//     { value: "Pastas de Rede / Sharepoint", label: "Pastas de Rede / Sharepoint" },
-//     { value: "VPN", label: "VPN" },
-//     { value: "Outros", label: "Outros" },
-// ];
+const ACESSOS_OPTIONS = [
+    { value: "Rede Corporativa", label: "Acesso à Rede" },
+    { value: "VPN", label: "VPN (Acesso Remoto)" },
+    { value: "Sharepoint", label: "Sharepoint / Pastas" },
+    { value: "Impressão", label: "Impressoras" },
+];
 
 // Schema Section 3 - TI
 const secaoTISchema = z.object({
@@ -512,14 +517,14 @@ export function AdmissaoFlow({
                     {currentSection === 2 && (
                         <Card>
                             <CardHeader className="bg-cream-dark dark:bg-warm-gray/20 rounded-t-lg border-b border-warm-gray/10"><CardTitle>Definições do Gestor</CardTitle></CardHeader>
-                            <CardContent className="pt-6 space-y-6">
+                            <CardContent className="pt-6 space-y-8">
                                 <FormField
                                     control={form.control}
                                     name="equipamentos_necessarios"
                                     render={() => (
                                         <FormItem>
-                                            <FormLabel>Equipamentos Necessários</FormLabel>
-                                            <div className="grid grid-cols-2 gap-2">
+                                            <FormLabel className="text-base font-semibold">1. Equipamentos Necessários</FormLabel>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-muted/20 p-4 rounded-lg">
                                                 {EQUIPAMENTOS_OPTIONS.map((item) => (
                                                     <FormField
                                                         key={item.value}
@@ -548,60 +553,305 @@ export function AdmissaoFlow({
                                         </FormItem>
                                     )}
                                 />
-                                <FormField
-                                    control={form.control}
-                                    name="buddy_mentor"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Buddy / Mentor</FormLabel>
-                                            <FormControl><Input placeholder="Nome do mentor" {...field} value={field.value ?? ""} /></FormControl>
-                                        </FormItem>
-                                    )}
-                                />
+
+                                <div className="border-t pt-6">
+                                    <FormLabel className="text-base font-semibold mb-3 block">2. Sistemas e Acessos</FormLabel>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <FormField
+                                            control={form.control}
+                                            name="softwares_necessarios"
+                                            render={() => (
+                                                <FormItem>
+                                                    <FormLabel>Softwares Necessários</FormLabel>
+                                                    <div className="grid grid-cols-1 gap-2 border p-3 rounded-md">
+                                                        {SOFTWARES_OPTIONS.map((item) => (
+                                                            <FormField
+                                                                key={item.value}
+                                                                control={form.control}
+                                                                name="softwares_necessarios"
+                                                                render={({ field }) => (
+                                                                    <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                                                                        <FormControl>
+                                                                            <Checkbox
+                                                                                checked={field.value?.includes(item.value) || false}
+                                                                                onCheckedChange={(checked: boolean) => {
+                                                                                    const currentValues = Array.isArray(field.value) ? field.value : [];
+                                                                                    return checked
+                                                                                        ? field.onChange([...currentValues, item.value])
+                                                                                        : field.onChange(currentValues.filter((v: string) => v !== item.value))
+                                                                                }}
+                                                                                disabled={isSectionReadOnly}
+                                                                            />
+                                                                        </FormControl>
+                                                                        <FormLabel className="font-normal">{item.label}</FormLabel>
+                                                                    </FormItem>
+                                                                )}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </FormItem>
+                                            )}
+                                        />
+
+                                        <div className="space-y-4">
+                                            <FormField
+                                                control={form.control}
+                                                name="necessita_vpn"
+                                                render={({ field }) => (
+                                                    <FormItem className="space-y-2">
+                                                        <FormLabel>Necessita VPN? (Acesso Remoto)</FormLabel>
+                                                        <FormControl>
+                                                            <RadioGroup onValueChange={field.onChange} value={field.value || ""} className="flex gap-4" disabled={isSectionReadOnly}>
+                                                                <div className="flex items-center space-x-2">
+                                                                    <RadioGroupItem value="Sim" id="vpn-sim" />
+                                                                    <Label htmlFor="vpn-sim">Sim</Label>
+                                                                </div>
+                                                                <div className="flex items-center space-x-2">
+                                                                    <RadioGroupItem value="Nao" id="vpn-nao" />
+                                                                    <Label htmlFor="vpn-nao">Não</Label>
+                                                                </div>
+                                                            </RadioGroup>
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="necessita_impressora"
+                                                render={({ field }) => (
+                                                    <FormItem className="space-y-2">
+                                                        <FormLabel>Necessita Acesso a Impressora?</FormLabel>
+                                                        <FormControl>
+                                                            <RadioGroup onValueChange={field.onChange} value={field.value || ""} className="flex gap-4" disabled={isSectionReadOnly}>
+                                                                <div className="flex items-center space-x-2">
+                                                                    <RadioGroupItem value="Sim" id="print-sim" />
+                                                                    <Label htmlFor="print-sim">Sim</Label>
+                                                                </div>
+                                                                <div className="flex items-center space-x-2">
+                                                                    <RadioGroupItem value="Nao" id="print-nao" />
+                                                                    <Label htmlFor="print-nao">Não</Label>
+                                                                </div>
+                                                            </RadioGroup>
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="sharepoint_pasta"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Pastas de Rede / Sharepoint</FormLabel>
+                                                        <FormControl>
+                                                            <Input placeholder="Especifique as pastas (ex: /Financeiro/Contas)" {...field} value={field.value || ""} disabled={isSectionReadOnly} />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="border-t pt-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <FormField
+                                            control={form.control}
+                                            name="buddy_mentor"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel className="text-base font-semibold">3. Buddy / Mentor</FormLabel>
+                                                    <FormControl><Input placeholder="Nome do mentor" {...field} value={field.value ?? ""} disabled={isSectionReadOnly} /></FormControl>
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="observacoes_gestor"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel className="text-base font-semibold">4. Observações Gerais</FormLabel>
+                                                    <FormControl><Input placeholder="Outras necessidades..." {...field} value={field.value ?? ""} disabled={isSectionReadOnly} /></FormControl>
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+                                </div>
                             </CardContent>
                         </Card>
                     )}
 
                     {/* SECAO 3 - TI */}
                     {currentSection === 3 && (
-                        <Card>
-                            <CardHeader className="bg-sage/10 dark:bg-sage/20 rounded-t-lg border-b border-sage/10"><CardTitle>Configuração TI</CardTitle></CardHeader>
-                            <CardContent className="pt-6 space-y-6">
-                                <FormField
-                                    control={form.control}
-                                    name="conta_ad_criada"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Conta AD Criada?</FormLabel>
-                                            <Select onValueChange={field.onChange} value={field.value ?? ""}>
-                                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                                                <SelectContent>
-                                                    <SelectItem value="Sim">Sim</SelectItem>
-                                                    <SelectItem value="Nao">Não</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="email_corporativo_criado"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Email Corporativo Criado?</FormLabel>
-                                            <Select onValueChange={field.onChange} value={field.value ?? ""}>
-                                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                                                <SelectContent>
-                                                    <SelectItem value="Sim">Sim</SelectItem>
-                                                    <SelectItem value="Nao">Não</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </FormItem>
-                                    )}
-                                />
-                                {/* Adicionar mais campos de TI conforme necessário, baseado no schema */}
-                            </CardContent>
-                        </Card>
+                        <div className="space-y-6">
+                            {/* Summary of Requests */}
+                            <Card className="bg-slate-50 border-slate-200">
+                                <CardHeader className="pb-3 border-b border-slate-200">
+                                    <CardTitle className="text-base text-slate-700 flex items-center gap-2">
+                                        <ClipboardList className="h-4 w-4" /> Resumo da Solicitação
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="pt-4 grid gap-6 md:grid-cols-2">
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-slate-500 mb-2 uppercase tracking-wider">Dados do Colaborador (RH)</h4>
+                                        <div className="space-y-1 text-sm">
+                                            <p><span className="font-medium">Nome Completo:</span> {form.getValues("nome_completo") || "-"}</p>
+                                            <p><span className="font-medium">Nome de Exibição:</span> {form.getValues("nome_exibicao") || "-"}</p>
+                                            <p><span className="font-medium">Cargo:</span> {form.getValues("cargo_funcao") || "-"}</p>
+                                            <p><span className="font-medium">Departamento:</span> {form.getValues("setor_departamento") || "-"}</p>
+                                            <p><span className="font-medium">Data Início:</span> {form.getValues("data_inicio") ? new Date(form.getValues("data_inicio")).toLocaleDateString('pt-BR') : "-"}</p>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-slate-500 mb-2 uppercase tracking-wider">Solicitações do Gestor</h4>
+                                        <div className="space-y-2 text-sm">
+                                            <div>
+                                                <span className="font-medium block">Equipamentos:</span>
+                                                {form.getValues("equipamentos_necessarios")?.length > 0
+                                                    ? <div className="flex flex-wrap gap-1 mt-1">{form.getValues("equipamentos_necessarios")?.map(e => <Badge key={e} variant="outline" className="bg-white">{e}</Badge>)}</div>
+                                                    : <span className="text-muted-foreground">Nenhum</span>}
+                                            </div>
+                                            <div>
+                                                <span className="font-medium block">Softwares:</span>
+                                                {form.getValues("softwares_necessarios")?.length > 0
+                                                    ? <div className="flex flex-wrap gap-1 mt-1">{form.getValues("softwares_necessarios")?.map(s => <Badge key={s} variant="outline" className="bg-white">{s}</Badge>)}</div>
+                                                    : <span className="text-muted-foreground">Nenhum</span>}
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                                <div className="bg-white p-2 rounded border">
+                                                    <span className="text-xs text-muted-foreground block">VPN</span>
+                                                    <span className="font-medium">{form.getValues("necessita_vpn") || "Não"}</span>
+                                                </div>
+                                                <div className="bg-white p-2 rounded border">
+                                                    <span className="text-xs text-muted-foreground block">Impressora</span>
+                                                    <span className="font-medium">{form.getValues("necessita_impressora") || "Não"}</span>
+                                                </div>
+                                            </div>
+                                            {form.getValues("sharepoint_pasta") && (
+                                                <div className="mt-2 text-xs bg-amber-50 p-2 rounded border border-amber-100 text-amber-800">
+                                                    <strong>Pastas/Sharepoint:</strong> {form.getValues("sharepoint_pasta")}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader className="bg-sage/10 dark:bg-sage/20 rounded-t-lg border-b border-sage/10"><CardTitle>Checklist de Configuração (TI)</CardTitle></CardHeader>
+                                <CardContent className="pt-6 space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <FormField
+                                            control={form.control}
+                                            name="conta_ad_criada"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Conta AD Criada?</FormLabel>
+                                                    <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                                                        <SelectContent>
+                                                            <SelectItem value="Sim">Sim</SelectItem>
+                                                            <SelectItem value="Nao">Não</SelectItem>
+                                                            <SelectItem value="NaoAplica">N/A</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="email_corporativo_criado"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Email Corporativo Criado?</FormLabel>
+                                                    <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                                                        <SelectContent>
+                                                            <SelectItem value="Sim">Sim</SelectItem>
+                                                            <SelectItem value="Nao">Não</SelectItem>
+                                                            <SelectItem value="NaoAplica">N/A</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+
+                                    {/* Additional TI Checks to match requirements */}
+                                    <div className="space-y-4 pt-4 border-t">
+                                        <h4 className="font-semibold text-sm">Configurações Baseadas na Solicitação</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {form.getValues("necessita_vpn") === 'Sim' && (
+                                                <FormField
+                                                    control={form.control}
+                                                    name="vpn_configurada"
+                                                    render={({ field }) => (
+                                                        <FormItem className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                                                            <FormLabel className="text-blue-900">VPN Configurada?</FormLabel>
+                                                            <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                                                                <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Status" /></SelectTrigger></FormControl>
+                                                                <SelectContent>
+                                                                    <SelectItem value="Sim">Sim, configurada</SelectItem>
+                                                                    <SelectItem value="Nao">Pendente</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                            )}
+                                            {form.getValues("necessita_impressora") === 'Sim' && (
+                                                <FormField
+                                                    control={form.control}
+                                                    name="impressoras_configuradas"
+                                                    render={({ field }) => (
+                                                        <FormItem className="bg-amber-50 p-3 rounded-lg border border-amber-100">
+                                                            <FormLabel className="text-amber-900">Impressoras Mapeadas?</FormLabel>
+                                                            <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                                                                <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Status" /></SelectTrigger></FormControl>
+                                                                <SelectContent>
+                                                                    <SelectItem value="Sim">Sim, mapeadas</SelectItem>
+                                                                    <SelectItem value="Nao">Pendente</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                            )}
+                                            <FormField
+                                                control={form.control}
+                                                name="softwares_instalados"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Softwares Instalados?</FormLabel>
+                                                        <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                                                            <FormControl><SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger></FormControl>
+                                                            <SelectContent>
+                                                                <SelectItem value="Sim">Sim, todos</SelectItem>
+                                                                <SelectItem value="Nao">Pendente</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <p className="text-xs text-muted-foreground mt-1">Conferir lista: {form.getValues("softwares_necessarios")?.join(", ") || "Nenhum"}</p>
+                                                    </FormItem>
+                                                )}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <FormField
+                                        control={form.control}
+                                        name="observacoes_ti"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Observações Técnicas</FormLabel>
+                                                <FormControl><Input placeholder="Registro de chamado, patrimônios, etc." {...field} value={field.value || ""} /></FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                </CardContent>
+                            </Card>
+                        </div>
                     )}
 
                     {/* SECAO 4 - COLABORADOR */}

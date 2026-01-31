@@ -21,7 +21,7 @@ interface AppUser {
 }
 
 const ROLES = ['Adm', 'RH', 'Gestor', 'TI'];
-const DEPARTMENTS = ['Financeiro', 'Marketing', 'Comercial', 'Logística', 'Jurídico', 'TI', 'RH'];
+const DEPARTMENTS = ['Financeiro', 'Marketing', 'Comercial', 'Logística', 'Jurídico', 'TI', 'RH', 'Compras', 'Franquias'];
 const REGIONS = ['Norte/Nordeste', 'Sul', 'Sudeste', 'Centro', 'Inside Sales'];
 
 export function UserManagement() {
